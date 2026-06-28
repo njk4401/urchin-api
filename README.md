@@ -1,6 +1,6 @@
 # urchin-api
 
-Async Python client for the **Urchin (Coral) API** — a community-maintained
+Unofficial async Python client for the **Urchin (Coral) API** — a community-maintained
 player blacklist and stat tracking service for Hypixel.
 
 ## Installation
