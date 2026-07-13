@@ -103,7 +103,7 @@ class _Base:
             a.append(f"{f.name}={getattr(self, f.name)!r}")
         if getattr(self, "extra"):
             a.append("extra={...}")
-        return f"{type(self).__name__}({", ".join(a)})"
+        return f"{type(self).__name__}({', '.join(a)})"
 
     @property
     def fields(self) -> list[str]:
