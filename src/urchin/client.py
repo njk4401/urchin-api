@@ -28,7 +28,7 @@ T = TypeVar("T")
 class UrchinClient:
     """Asynchronous client for the Urchin (Coral) REST API.
 
-    All API GET methods are transparently cached for that repeated
+    All API GET methods are transparently cached so that repeated
     identical requests within a short window do not spam the network.
 
     These cached entries can be cleared by calling :attr:`cache`.clear.
@@ -81,7 +81,8 @@ class UrchinClient:
                 An existing :class:`aiohttp.ClientSession` to reuse.
                 If provided, the responsibility for closing the session
                 falls upon the caller; the client will **NOT**
-                close the session on :meth:`close`.
+                close the session on :meth:`close` or
+                after losing scope of `async with`.
         """
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
