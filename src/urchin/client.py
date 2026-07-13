@@ -9,7 +9,7 @@ Minimal usage::
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, TypeVar, overload
+from typing import Any, overload
 
 import aiohttp
 
@@ -20,9 +20,6 @@ from .models import (
     GuildSession, GuildSnapshot, Marker, PlayerSession,
     PlayerSnapshot, Snapshot, Tag
 )
-
-
-T = TypeVar("T")
 
 
 class UrchinClient:
