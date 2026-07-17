@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "urchin-api"
-version = "0.1.2"
+version = "0.1.3"
 description = "Async Python client for the Urchin (Coral) API — Hypixel blacklist and session statistics."
 readme = "README.md"
 license = { text = "MIT" }

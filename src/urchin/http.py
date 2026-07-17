@@ -81,7 +81,7 @@ async def request(
                             wait = ra
                     logger.debug(
                         f"Retryable HTTP {response.status} for {url} - "
-                        f"waiting {wait:.2f}s ({attempt+1}/{max_retries})"
+                        f"waiting {wait:.3f}s ({attempt+1}/{max_retries})"
                     )
                     await asyncio.sleep(wait)
                     continue

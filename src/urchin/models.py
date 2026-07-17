@@ -24,6 +24,7 @@ def basedataclass(cls: T, /, **kwargs: bool) -> T: ...
 def basedataclass(cls: None, /, **kwargs: bool) -> Callable[[T], T]: ...
 @dataclass_transform(frozen_default=True)
 def basedataclass(cls: T = None, /, **kwargs: bool) -> T | Callable[[T], T]:
+    kwargs.setdefault("frozen", True)
     kwargs.setdefault("repr", False)
     kwargs.setdefault("slots", True)
     if cls is None:
