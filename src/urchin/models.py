@@ -125,7 +125,7 @@ class PlayerSession(_Base):
     """Unix millisecond timestamp marking the start of the session."""
     since_readable: str = basefield(name="from_readable")
     """:data:`since` translated into a human-readable string."""
-    delta: dict[str, Any] = basefield(repr=False)
+    delta: dict[str, Any] = basefield(repr=False, default_factory=dict)
     """Delta of player statistics since start of session."""
 
 
@@ -180,13 +180,27 @@ class Tag(_Base):
     reason: str
     """Human-readable reason provided by the tagger."""
     added_on: int
-    """Unix timestamp in milliseconds when the tag was created."""
+    """Unix millisecond timestamp of when the tag was created."""
     added_by: int | None = None
     """Discord user ID of the tagger, if public."""
     added_by_username: str | None = None
     """Discord username of the tagger, if public."""
     hide_username: bool = False
     """Whether the tagger requested their username to be hidden."""
+
+
+@basedataclass
+class Winstreak(_Base):
+    """A single winstreak estimation."""
+
+    value: int
+    """The estimated winstreak value."""
+    approximate: bool
+    """Whether the estimate is approximated."""
+    timestamp: int
+    """Unix millisecond timestamp of when the winstreak was estimated."""
+    readable: str
+    """:data:`timestamp` translated into a human-readable string."""
 
 
 @basedataclass

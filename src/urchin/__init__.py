@@ -17,13 +17,13 @@ from .exceptions import (
 )
 from .models import (
     GuildSession, GuildSnapshot, Marker, PlayerSession,
-    PlayerSnapshot, Snapshot, Tag
+    PlayerSnapshot, Snapshot, Tag, Winstreak
 )
 
 
-__version__ = "0.1"
+__version__ = "0.2.0"
 
-__all__ = [
+__all__ = (
     "UrchinClient",
     "UrchinError",
     "AuthError",
@@ -33,8 +33,9 @@ __all__ = [
     "Marker",
     "Snapshot",
     "Tag",
+    "Winstreak",
     "PlayerSession",
     "PlayerSnapshot",
     "GuildSession",
     "GuildSnapshot"
-]
+)

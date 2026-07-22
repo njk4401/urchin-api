@@ -9,7 +9,7 @@ Minimal usage::
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 import aiohttp
 
@@ -18,7 +18,7 @@ from .exceptions import NotFoundError
 from .http import request
 from .models import (
     GuildSession, GuildSnapshot, Marker, PlayerSession,
-    PlayerSnapshot, Snapshot, Tag
+    PlayerSnapshot, Snapshot, Tag, Winstreak
 )
 
 
@@ -46,7 +46,9 @@ class UrchinClient:
         finally:
             await client.close()
     """
-    def __init__(self, *,
+    def __init__(
+        self,
+        *,
         api_key: str,
         base_url: str = "https://api.urchin.gg/v3",
         max_retries: int = 3,
@@ -172,27 +174,31 @@ class UrchinClient:
         return await self._request("PATCH", path, **kwargs)
 
     #==========================================================================
-    # Player Sessions
+    # Player Stats
     #==========================================================================
     @overload
-    async def get_session(self,
+    async def get_session(
+        self,
         player: str,
         *,
         duration: str
     ) -> PlayerSession: ...
     @overload
-    async def get_session(self,
+    async def get_session(
+        self,
         player: str,
         *,
         since: int | str
     ) -> PlayerSession: ...
     @overload
-    async def get_session(self,
+    async def get_session(
+        self,
         player: str,
         *,
         marker: str
     ) -> PlayerSession: ...
-    async def get_session(self,
+    async def get_session(
+        self,
         player: str,
         *,
         duration: str = None,
@@ -209,14 +215,19 @@ class UrchinClient:
                 The player's username or UUID.
             duration:
                 Lookback window as a duration string.
-                e.g. `"48h"`, `"10d"`, `"2w"`
+                e.g. `"48h"`, `"10d"`, `"2w"`.
+                For values longer than 1 week, requires that
+                :attr:`api_key` is linked to `player` or that
+                it holds the `All Sessions` permission.
             since:
                 Absolute start of the session as either
-                a Unix millisecond timestamp or a RFC 3339 string.
+                a Unix millisecond timestamp or RFC 3339 string.
+                Requires that :attr:`api_key` is linked to `player`
+                or that it holds the `All Sessions` permission.
             marker:
                 Name of a saved marker that defines the start of the session.
                 Requires that :attr:`api_key` is linked to `player`
-                or that it holds the `All Sessions` access level.
+                or that it holds the `All Sessions` permission.
         """
         p = {
             k: v for k, v in (
@@ -234,6 +245,36 @@ class UrchinClient:
         data = await self._get("player/sessions/custom", params=p)
         return PlayerSession.from_dict(data)
 
+    async def get_monthly(self, player: str) -> PlayerSession:
+        """Fetch the change in a player's statistics over the past month.
+
+        This method is not restricted by :attr:`api_key`.
+
+        Parameters:
+            player:
+                The player's username or UUID.
+        """
+        data = await self._get(
+            "player/sessions/monthly",
+            params={"player": player}
+        )
+        return PlayerSession.from_dict(data)
+
+    async def get_yearly(self, player: str) -> PlayerSession:
+        """Fetch the change in a player's statistics over the past year.
+
+        This method is not restricted by :attr:`api_key`.
+
+        Parameters:
+            player:
+                The player's username or UUID.
+        """
+        data = await self._get(
+            "player/sessions/yearly",
+            params={"player": player}
+        )
+        return PlayerSession.from_dict(data)
+
     async def get_markers(self, player: str) -> list[Marker]:
         """Fetch all session markers saved for a player.
 
@@ -242,14 +283,16 @@ class UrchinClient:
         changes since a specific moment.
 
         Requires that :attr:`api_key` is linked to `player`
-        or that it holds the `All Sessions` access level.
+        or that it holds the `All Sessions` permission.
 
         Parameters:
             player:
                 The player's username or UUID.
         """
-        p = {"player": player}
-        data = await self._get("player/sessions/markers", params=p)
+        data = await self._get(
+            "player/sessions/markers",
+            params={"player": player}
+        )
         return [Marker.from_dict(m) for m in data.get("markers", [])]
 
     async def create_marker(self, player: str, name: str = None) -> Marker:
@@ -260,7 +303,7 @@ class UrchinClient:
         stat changes since a specific moment.
 
         Requires that :attr:`api_key` is linked to `player`
-        or that it holds the `All Sessions` access level.
+        or that it holds the `All Sessions` permission.
 
         Parameters:
             player:
@@ -269,9 +312,11 @@ class UrchinClient:
                 A label assigned to the marker, limited to 32 characters.
                 If not provided, will default to today's date.
         """
-        p = {"player": player}
-        j = {"name": name[:32]} if name else {}
-        data = await self._post("player/sessions/markers", params=p, json=j)
+        data = await self._post(
+            "player/sessions/markers",
+            params={"player": player},
+            json={"name": name[:32]} if name else {}
+        )
         return Marker.from_dict(data)
 
     async def delete_marker(self, player: str, name: str) -> bool:
@@ -281,7 +326,7 @@ class UrchinClient:
             **There is no confirmation nor a way to recover a deleted marker.**
 
         Requires that :attr:`api_key` is linked to `player`
-        or that it holds the `All Sessions` access level.
+        or that it holds the `All Sessions` permission.
 
         Parameters:
             player:
@@ -294,10 +339,10 @@ class UrchinClient:
                 `True` if the marker was found and successfully deleted,
                 otherwise `False`.
         """
-        p = {"player": player}
         try:
             data = await self._delete(
-                f"player/sessions/markers/{name[:32]}", params=p
+                f"player/sessions/markers/{name[:32]}",
+                params={"player": player}
             )
         except NotFoundError:
             return False
@@ -311,7 +356,7 @@ class UrchinClient:
         """Attempt to rename a session marker for a player.
 
         Requires that :attr:`api_key` is linked to `player`
-        or that it holds the `All Sessions` access level.
+        or that it holds the `All Sessions` permission.
 
         Parameters:
             player:
@@ -326,17 +371,18 @@ class UrchinClient:
                 `True` if the marker was found and successfully renamed,
                 otherwise `False`.
         """
-        p = {"player": player}
-        j = {"new_name": new_name[:32]}
         try:
             data = await self._patch(
-                f"player/sessions/markers/{name[:32]}", params=p, json=j
+                f"player/sessions/markers/{name[:32]}",
+                params={"player": player},
+                json={"new_name": new_name[:32]}
             )
         except NotFoundError:
             return False
         return data.get("success", False)
 
-    async def get_snapshots(self,
+    async def get_snapshots(
+        self,
         player: str,
         *,
         before: int | str = None,
@@ -348,17 +394,17 @@ class UrchinClient:
         :meth:`get_snapshot` in order to fetch the most accurate data.
 
         Requires that :attr:`api_key` is linked to `player`
-        or that it holds the `All Sessions` access level.
+        or that it holds the `All Sessions` permission.
 
         Parameters:
             player:
                 The player's username or UUID.
             before:
                 Exclude snapshots recorded at or after this time.
-                Either a Unix millisecond timestamp or a RFC 3339 string.
+                Either a Unix millisecond timestamp or RFC 3339 string.
             after:
                 Exclude snapshots recorded before this time.
-                Either a Unix millisecond timestamp or a RFC 3339 string.
+                Either a Unix millisecond timestamp or RFC 3339 string.
         """
         p = {
             k: v for k, v in (
@@ -374,21 +420,48 @@ class UrchinClient:
         """Fetch a player's full statistics snapshot at a given timestamp.
 
         Requires that :attr:`api_key` is linked to `player`
-        or that it holds the `All Sessions` access level.
+        or that it holds the `All Sessions` permission.
 
         Parameters:
             player:
                 The player's username or UUID.
             at:
                 The timestamp of the desired snapshot as either
-                a Unix millisecond timestamp or a RFC 3339 string.
+                a Unix millisecond timestamp or RFC 3339 string.
                 If no snapshot exists at the exact time given,
                 will return either the nearest rounded down,
                 or the earliest.
         """
-        p = {"player": player, "at": at}
-        data = await self._get("player/sessions/snapshots", params=p)
+        data = await self._get(
+            "player/sessions/snapshots",
+            params={"player": player, "at": at}
+        )
         return PlayerSnapshot.from_dict(data)
+
+    async def get_winstreaks(
+        self,
+        player: str,
+        mode: Literal[
+            "core", "overall", "solos", "doubles", "threes", "fours", "4v4"
+        ] = "core"
+    ) -> list[Winstreak]:
+        """Fetch a player's Bed Wars winstreak history
+        reconstructed from stored snapshots.
+
+        Parameters:
+            player:
+                The player's username or UUID.
+            mode:
+                The Bed Wars mode to reconstruct.
+        """
+        data = await self._get(
+            "player/winstreaks",
+            params={"player": player}
+        )
+        return [
+            Winstreak.from_dict(d)
+            for d in data.get("modes", {}).get(mode, [])
+        ]
 
     #==========================================================================
     # Blacklist
@@ -400,17 +473,25 @@ class UrchinClient:
             player:
                 The player's username or UUID.
         """
-        p = {"player": player}
-        data = await self._get("player/tags", params=p)
-        return [Tag.from_dict(v) for v in data.get("tags")]
+        data = await self._get(
+            "player/tags",
+            params={"player": player}
+        )
+        return [Tag.from_dict(v) for v in data.get("tags", [])]
 
     @overload
-    async def batch_get_tags(self, *uuids: str) -> dict[str, list[Tag]]: ...
-    @overload
-    async def batch_get_tags(self,
-        uuids: Iterable[str], /
+    async def batch_get_tags(
+        self,
+        *uuids: str
     ) -> dict[str, list[Tag]]: ...
-    async def batch_get_tags(self,
+    @overload
+    async def batch_get_tags(
+        self,
+        uuids: Iterable[str],
+        /
+    ) -> dict[str, list[Tag]]: ...
+    async def batch_get_tags(
+        self,
         *uuids: str | Iterable[str]
     ) -> dict[str, list[Tag]]:
         """Fetch blacklist tags for multiple players in a single request.
@@ -426,10 +507,10 @@ class UrchinClient:
 
         Returns:
             dict[str, list[Tag]]:
-                A mapping of each UUID which was passed with its associated
-                list of tags. UUIDs with no tags are included with
-                an empty list. UUIDs which were silently dropped will
-                be absent from the mapping.
+                A mapping of each valid UUID with
+                its associated list of tags.
+                UUIDs which were silently dropped
+                will be absent from the mapping.
         """
         if len(uuids) == 1 and not isinstance(uuids[0], str):
             j = {"uuids": list(uuids[0])[:100]}
@@ -448,13 +529,12 @@ class UrchinClient:
         }
 
     async def blacklist_lock(self, player: str, reason: str) -> None:
-        """Apply a moderation lock to a player.
+        """Apply a blacklist lock to a player.
 
-        While a player is locked, all attempts to add, modify,
-        or remove tags for them will be rejected until the lock
-        is lifted via :meth:`blacklist_unlock`.
+        While a player is locked, all attempts to add, modify, or remove
+        tags for them will be rejected until the lock is lifted.
 
-        Requires that :attr:`api_key` holds the `Moderator` access level.
+        Requires that :attr:`api_key` holds the `Moderator` rank.
 
         Parameters:
             player:
@@ -462,26 +542,31 @@ class UrchinClient:
             reason:
                 An explanation for why the lock is being applied.
         """
-        p = {"player": player}
-        j = {"reason": reason}
-        await self._post("player/lock", params=p, json=j)
+        await self._post(
+            "player/lock",
+            params={"player": player},
+            json={"reason": reason}
+        )
 
     async def blacklist_unlock(self, player: str) -> None:
-        """Lift a moderation lock from a player.
+        """Lift a blacklist lock from a player.
 
-        Once unlocked, tags can be added to or modified
-        for the player again as normal.
+        Once a player is unlocked, tags can be added, modified,
+        or removed from them again as normal.
 
-        Requires that :attr:`api_key` holds the `Moderator` access level.
+        Requires that :attr:`api_key` holds the `Moderator` rank.
 
         Parameters:
             player:
                 The player's username or UUID.
         """
-        p = {"player": player}
-        await self._delete("player/lock", params=p)
+        await self._delete(
+            "player/lock",
+            params={"player": player}
+        )
 
-    async def add_tag(self,
+    async def add_tag(
+        self,
         player: str,
         tag_type: str,
         reason: str,
@@ -498,26 +583,33 @@ class UrchinClient:
             tag_type:
                 The tag type to apply.
                 The types that can be applied depend
-                on the access level of :attr:`api_key`.
+                on the rank of :attr:`api_key`.
             reason:
                 An explanation for why this tag is being applied.
             hide_account:
                 Request that the tagger's account
                 not be associated with the applied tag.
                 Whether this is honored depends on the
-                access level of :attr:`api_key`.
+                rank of :attr:`api_key`.
         """
-        p = {"player": player}
-        j = {"type": tag_type, "reason": reason, "hide_username": hide_account}
-        data = await self._post("tags", params=p, json=j)
+        data = await self._post(
+            "tags",
+            params={
+                "player": player
+            },
+            json={
+                "type": tag_type,
+                "reason": reason,
+                "hide_username": hide_account
+            }
+        )
         return Tag.from_dict(data)
 
     async def remove_tag(self, player: str, tag_type: str) -> None:
-        """Remove a blacklist tag of the given type from a player.
+        """Remove a blacklist tag from a player.
 
-        Removing a tag created by someone else or
-        a tag that was applied before :attr:`api_key` was created,
-        requires that :attr:`api_key` holds the appropriate access level.
+        Removing a tag applied by someone else requires
+        that :attr:`api_key` holds a higher rank.
 
         Parameters:
             player:
@@ -525,9 +617,11 @@ class UrchinClient:
             tag_type:
                 The type of tag to remove.
         """
-        p = {"player": player}
-        j = {"type": tag_type}
-        await self._delete("tags", params=p, json=j)
+        await self._delete(
+            "tags",
+            params={"player": player},
+            json={"type": tag_type}
+        )
 
     async def modify_tag(self,
         player: str,
@@ -539,7 +633,10 @@ class UrchinClient:
     ) -> Tag:
         """Modify an active blacklist tag applied to a player.
 
-        The `confirmed_cheater` type cannot be set through this endpoint.
+        The `confirmed_cheater` type cannot be set with this method.
+
+        Modified tags are associated with
+        the account linked to :attr:`api_key`.
 
         Parameters:
             player:
@@ -555,32 +652,41 @@ class UrchinClient:
                 Request that the tagger's account
                 not be associated with the updated tag.
                 Whether this is honored depends on the
-                access level of :attr:`api_key`.
+                rank of :attr:`api_key`.
         """
-        p = {"player": player}
-        j = {
-            "type": tag_type, "hide_username": hide_account,
-            "new_reason": new_reason, "new_type": new_type or tag_type
-        }
-        data = await self._patch("tags", params=p, json=j)
+        data = await self._patch(
+            "tags",
+            params={
+                "player": player
+            },
+            json={
+                "type": tag_type,
+                "new_reason": new_reason,
+                "new_type": new_type or tag_type,
+                "hide_username": hide_account
+            }
+        )
         return Tag.from_dict(data)
 
     #==========================================================================
-    # Guild Sessions
+    # Guild Stats
     #==========================================================================
     @overload
-    async def get_guild_session(self,
+    async def get_guild_session(
+        self,
         guild: str,
         *,
         duration: str
     ) -> GuildSession: ...
     @overload
-    async def get_guild_session(self,
+    async def get_guild_session(
+        self,
         guild: str,
         *,
         since: int | str
     ) -> GuildSession: ...
-    async def get_guild_session(self,
+    async def get_guild_session(
+        self,
         guild: str,
         *,
         duration: str = None,
@@ -601,7 +707,7 @@ class UrchinClient:
                 e.g. `"48h"`, `"10d"`, `"2w"`
             since:
                 Absolute start of the session as either
-                a Unix millisecond timestamp or a RFC 3339 string.
+                a Unix millisecond timestamp or RFC 3339 string.
         """
         p = {
             k: v for k, v in (
@@ -617,7 +723,8 @@ class UrchinClient:
         data = await self._get("guild/sessions/custom", params=p)
         return GuildSession.from_dict(data)
 
-    async def get_guild_snapshot(self,
+    async def get_guild_snapshot(
+        self,
         guild: str,
         at: int | str
     ) -> GuildSnapshot:
@@ -630,16 +737,19 @@ class UrchinClient:
                 The guild's name or ID.
             at:
                 The timestamp of the desired snapshot as either
-                a Unix millisecond timestamp or a RFC 3339 string.
+                a Unix millisecond timestamp or RFC 3339 string.
                 If no snapshot exists at the exact time given,
                 will return either the nearest rounded down,
                 or the earliest.
         """
-        p = {"guild": guild, "at": at}
-        data = await self._get("guild/sessions/snapshots", params=p)
+        data = await self._get(
+            "guild/sessions/snapshots",
+            params={"guild": guild, "at": at}
+        )
         return GuildSnapshot.from_dict(data)
 
-    async def get_guild_snapshots(self,
+    async def get_guild_snapshots(
+        self,
         guild: str,
         *,
         before: int | str = None,
@@ -657,10 +767,10 @@ class UrchinClient:
                 The guild's name or ID.
             before:
                 Exclude snapshots recorded at or after this time.
-                Either a Unix millisecond timestamp or a RFC 3339 string.
+                Either a Unix millisecond timestamp or RFC 3339 string.
             after:
                 Exclude snapshots recorded before this time.
-                Either a Unix millisecond timestamp or a RFC 3339 string.
+                Either a Unix millisecond timestamp or RFC 3339 string.
         """
         p = {
             k: v for k, v in (
